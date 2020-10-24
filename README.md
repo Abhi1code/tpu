@@ -6,7 +6,7 @@ FashionPedia flask api for cloth and attribute segmentation.
 
 > pip install requirements.txt
 
-> Download this <a href="https://storage.googleapis.com/cloud-tpu-checkpoints/detection/projects/fashionpedia/fashionpedia-spinenet-49.tar.gz">model</a> file and extract it in the current folder (Folder name must be `fashionpedia-spinenet-49`).
+> Download <a href="https://storage.googleapis.com/cloud-tpu-checkpoints/detection/projects/fashionpedia/fashionpedia-spinenet-49.tar.gz">this</a> model file and extract it in the current folder (Folder name must be `fashionpedia-spinenet-49`).
 
 > Run command `python app.py` to start the server.
 
@@ -20,4 +20,4 @@ FashionPedia flask api for cloth and attribute segmentation.
 <img src="" />
 
 ## Output Image
-<img src="" />
+<img src="https://raw.githubusercontent.com/Abhi1code/tpu/main/Capture.PNG" />
