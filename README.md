@@ -17,7 +17,7 @@ FashionPedia flask api for cloth and attribute segmentation.
 > Open `output.html` file in the browser to check rendered image and `output.npy` contains numpy array of predictions.
 
 ## Input Image
-<img src="" />
+<img src="https://raw.githubusercontent.com/Abhi1code/tpu/main/test.jpg" />
 
 ## Output Image
 <img src="https://raw.githubusercontent.com/Abhi1code/tpu/main/Capture.PNG" />
