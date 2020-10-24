@@ -52,14 +52,14 @@ flags.DEFINE_string(
     'model', 'attribute_mask_rcnn', 'Support `attribute_mask_rcnn`.')
 flags.DEFINE_integer('image_size', 640, 'The image size.')
 flags.DEFINE_string(
-    'checkpoint_path', '', 'The path to the checkpoint file.')
+    'checkpoint_path', 'fashionpedia-spinenet-49/model.ckpt', 'The path to the checkpoint file.')
 flags.DEFINE_string(
-    'config_file', '', 'The config file template.')
+    'config_file', 'configs/yaml/spinenet49_amrcnn.yaml', 'The config file template.')
 flags.DEFINE_string(
     'params_override', '', 'The YAML file/string that specifies the parameters '
     'override in addition to the `config_file`.')
 flags.DEFINE_string(
-    'label_map_file', '',
+    'label_map_file', 'dataset/fashionpedia_label_map.csv',
     'The label map file. See --label_map_format for the definition.')
 flags.DEFINE_string(
     'label_map_format', 'csv',
@@ -75,19 +75,19 @@ flags.DEFINE_string(
     'output_file', '/tmp/res.npy',
     'The output npy file that includes model output.')
 flags.DEFINE_integer(
-    'max_boxes_to_draw', 10, 'The maximum number of boxes to draw.')
+    'max_boxes_to_draw', 20, 'The maximum number of boxes to draw.')
 flags.DEFINE_float(
     'min_score_threshold', 0.05,
     'The minimum score thresholds in order to draw boxes.')
 
 
-def main(unused_argv):
-  del unused_argv
+
+def initiate():
   # Load the label map.
   print(' - Loading the label map...')
   label_map_dict = {}
-  if FLAGS.label_map_format == 'csv':
-    with tf.gfile.Open(FLAGS.label_map_file, 'r') as csv_file:
+  if 'csv' == 'csv':
+    with tf.gfile.Open('dataset/fashionpedia_label_map.csv', 'r') as csv_file:
       reader = csv.reader(csv_file, delimiter=':')
       for row in reader:
         if len(row) != 2:
@@ -101,14 +101,14 @@ def main(unused_argv):
         }
   else:
     raise ValueError(
-        'Unsupported label map format: {}.'.format(FLAGS.label_mape_format))
+        'Unsupported label map format: {}.'.format('csv'))
 
-  params = config_factory.config_generator(FLAGS.model)
-  if FLAGS.config_file:
+  params = config_factory.config_generator('attribute_mask_rcnn')
+  if 'configs/yaml/spinenet49_amrcnn.yaml':
     params = params_dict.override_params_dict(
-        params, FLAGS.config_file, is_strict=True)
+        params, 'configs/yaml/spinenet49_amrcnn.yaml', is_strict=True)
   params = params_dict.override_params_dict(
-      params, FLAGS.params_override, is_strict=True)
+      params, '', is_strict=True)
   params.override({
       'architecture': {
           'use_bfloat16': False,  # The inference runs on CPU/GPU.
@@ -125,7 +125,7 @@ def main(unused_argv):
     image.set_shape([None, None, 3])
 
     image = input_utils.normalize_image(image)
-    image_size = [FLAGS.image_size, FLAGS.image_size]
+    image_size = [640, 640]
     image, image_info = input_utils.resize_and_crop_image(
         image,
         image_size,
@@ -149,93 +149,81 @@ def main(unused_argv):
 
     # Create a saver in order to load the pre-trained checkpoint.
     saver = tf.train.Saver()
+    sess = tf.Session()
+    print(' - Loading the checkpoint...')
+    saver.restore(sess, 'fashionpedia-spinenet-49/model.ckpt')
+    print(' - Checkpoint Loaded...')
+    return sess, predictions, image_input
 
-    image_with_detections_list = []
-    with tf.Session() as sess:
-      print(' - Loading the checkpoint...')
-      saver.restore(sess, FLAGS.checkpoint_path)
+def runModel(sess, predictions, image_input, image_file):
 
-      res = []
-      image_files = tf.gfile.Glob(FLAGS.image_file_pattern)
-      for i, image_file in enumerate(image_files):
-        print(' - Processing image %d...' % i)
+    print(' - Processing image ...')
+    with tf.gfile.GFile(image_file, 'rb') as f:
+        image_bytes = f.read()
 
-        with tf.gfile.GFile(image_file, 'rb') as f:
-          image_bytes = f.read()
+    image = Image.open(image_file)
+    image = image.convert('RGB')  # needed for images with 4 channels.
+    width, height = image.size
+    np_image = (np.array(image.getdata())
+                .reshape(height, width, 3).astype(np.uint8))
 
-        image = Image.open(image_file)
-        image = image.convert('RGB')  # needed for images with 4 channels.
-        width, height = image.size
-        np_image = (np.array(image.getdata())
-                    .reshape(height, width, 3).astype(np.uint8))
+    predictions_np = sess.run(
+        predictions, feed_dict={image_input: image_bytes})
 
-        predictions_np = sess.run(
-            predictions, feed_dict={image_input: image_bytes})
+    num_detections = int(predictions_np['num_detections'][0])
+    np_boxes = predictions_np['detection_boxes'][0, :num_detections]
+    np_scores = predictions_np['detection_scores'][0, :num_detections]
+    np_classes = predictions_np['detection_classes'][0, :num_detections]
+    np_classes = np_classes.astype(np.int32)
+    np_attributes = predictions_np['detection_attributes'][
+                    0, :num_detections, :]
 
-        num_detections = int(predictions_np['num_detections'][0])
-        np_boxes = predictions_np['detection_boxes'][0, :num_detections]
-        np_scores = predictions_np['detection_scores'][0, :num_detections]
-        np_classes = predictions_np['detection_classes'][0, :num_detections]
-        np_classes = np_classes.astype(np.int32)
-        np_attributes = predictions_np['detection_attributes'][
-            0, :num_detections, :]
-        np_masks = None
-        if 'detection_masks' in predictions_np:
-          instance_masks = predictions_np['detection_masks'][0, :num_detections]
-          np_masks = mask_utils.paste_instance_masks(
-              instance_masks, box_utils.yxyx_to_xywh(np_boxes), height, width)
-          encoded_masks = [
-              mask_api.encode(np.asfortranarray(np_mask))
-              for np_mask in list(np_masks)]
+    np_masks = None
+    if 'detection_masks' in predictions_np:
+        instance_masks = predictions_np['detection_masks'][0, :num_detections]
+        np_masks = mask_utils.paste_instance_masks(
+            instance_masks, box_utils.yxyx_to_xywh(np_boxes), height, width)
+        encoded_masks = [
+            mask_api.encode(np.asfortranarray(np_mask))
+            for np_mask in list(np_masks)]
 
-        res.append({
-            'image_file': image_file,
-            'boxes': np_boxes,
-            'classes': np_classes,
-            'scores': np_scores,
-            'attributes': np_attributes,
-            'masks': encoded_masks,
-        })
+    res = {
+        'image_file': image_file,
+        'boxes': np_boxes.tolist(),
+        'classes': np_classes.tolist(),
+        'scores': np_scores.tolist(),
+        'attributes': np_attributes.tolist()
+    }
+    #'masks': encoded_masks,
+    print("Output generated")
+    return res
 
-        image_with_detections = (
-            visualization_utils.visualize_boxes_and_labels_on_image_array(
-                np_image,
-                np_boxes,
-                np_classes,
-                np_scores,
-                label_map_dict,
-                instance_masks=np_masks,
-                use_normalized_coordinates=False,
-                max_boxes_to_draw=FLAGS.max_boxes_to_draw,
-                min_score_thresh=FLAGS.min_score_threshold))
-        image_with_detections_list.append(image_with_detections)
-
-  print(' - Saving the outputs...')
-  formatted_image_with_detections_list = [
-      Image.fromarray(image.astype(np.uint8))
-      for image in image_with_detections_list]
-  html_str = '<html>'
-  image_strs = []
-  for formatted_image in formatted_image_with_detections_list:
-    with io.BytesIO() as stream:
-      formatted_image.save(stream, format='JPEG')
-      data_uri = base64.b64encode(stream.getvalue()).decode('utf-8')
-    image_strs.append(
-        '<img src="data:image/jpeg;base64,{}", height=800>'
-        .format(data_uri))
-  images_str = ' '.join(image_strs)
-  html_str += images_str
-  html_str += '</html>'
-  with tf.gfile.GFile(FLAGS.output_html, 'w') as f:
-    f.write(html_str)
-  np.save(FLAGS.output_file, res)
+def save_outputs():
+    print(' - Saving the outputs...')
+    formatted_image_with_detections_list = [
+        Image.fromarray(image.astype(np.uint8))
+        for image in image_with_detections_list]
+    html_str = '<html>'
+    image_strs = []
+    for formatted_image in formatted_image_with_detections_list:
+        with io.BytesIO() as stream:
+            formatted_image.save(stream, format='JPEG')
+            data_uri = base64.b64encode(stream.getvalue()).decode('utf-8')
+        image_strs.append(
+            '<img src="data:image/jpeg;base64,{}", height=800>'
+                .format(data_uri))
+    images_str = ' '.join(image_strs)
+    html_str += images_str
+    html_str += '</html>'
+    with tf.gfile.GFile(FLAGS.output_html, 'w') as f:
+        f.write(html_str)
+    np.save(FLAGS.output_file, res)
 
 
-if __name__ == '__main__':
-  flags.mark_flag_as_required('model')
-  flags.mark_flag_as_required('checkpoint_path')
-  flags.mark_flag_as_required('label_map_file')
-  flags.mark_flag_as_required('image_file_pattern')
-  flags.mark_flag_as_required('output_html')
-  logging.set_verbosity(logging.INFO)
-  tf.app.run(main)
+#if __name__ == '__main__':
+  #logging.set_verbosity(logging.INFO)
+  #tf.app.run(initiate)
+  #sess, predictions, image_input = initiate()
+  #res = runModel(sess, predictions, image_input, 'test.jpg')
+
+
