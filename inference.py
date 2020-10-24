@@ -198,7 +198,78 @@ def runModel(sess, predictions, image_input, image_file):
     print("Output generated")
     return res
 
-def save_outputs():
+def saveOutputs(sess, predictions, image_input, image_file):
+    print(' - Loading the label map...')
+    label_map_dict = {}
+    if 'csv' == 'csv':
+        with tf.gfile.Open('dataset/fashionpedia_label_map.csv', 'r') as csv_file:
+            reader = csv.reader(csv_file, delimiter=':')
+            for row in reader:
+                if len(row) != 2:
+                    raise ValueError('Each row of the csv label map file must be in '
+                                     '`id:name` format.')
+                id_index = int(row[0])
+                name = row[1]
+                label_map_dict[id_index] = {
+                    'id': id_index,
+                    'name': name,
+                }
+
+    print(' - Processing image ...')
+    with tf.gfile.GFile(image_file, 'rb') as f:
+        image_bytes = f.read()
+
+    image = Image.open(image_file)
+    image = image.convert('RGB')  # needed for images with 4 channels.
+    width, height = image.size
+    np_image = (np.array(image.getdata())
+                .reshape(height, width, 3).astype(np.uint8))
+
+    predictions_np = sess.run(
+        predictions, feed_dict={image_input: image_bytes})
+
+    num_detections = int(predictions_np['num_detections'][0])
+    np_boxes = predictions_np['detection_boxes'][0, :num_detections]
+    np_scores = predictions_np['detection_scores'][0, :num_detections]
+    np_classes = predictions_np['detection_classes'][0, :num_detections]
+    np_classes = np_classes.astype(np.int32)
+    np_attributes = predictions_np['detection_attributes'][
+                    0, :num_detections, :]
+
+    np_masks = None
+    if 'detection_masks' in predictions_np:
+        instance_masks = predictions_np['detection_masks'][0, :num_detections]
+        np_masks = mask_utils.paste_instance_masks(
+            instance_masks, box_utils.yxyx_to_xywh(np_boxes), height, width)
+        encoded_masks = [
+            mask_api.encode(np.asfortranarray(np_mask))
+            for np_mask in list(np_masks)]
+
+    res = []
+    res.append({
+        'image_file': image_file,
+        'boxes': np_boxes,
+        'classes': np_classes,
+        'scores': np_scores,
+        'attributes': np_attributes
+    })
+    #'masks': encoded_masks,
+    print("Output generated")
+
+    image_with_detections_list = []
+    image_with_detections = (
+        visualization_utils.visualize_boxes_and_labels_on_image_array(
+            np_image,
+            np_boxes,
+            np_classes,
+            np_scores,
+            label_map_dict,
+            instance_masks=np_masks,
+            use_normalized_coordinates=False,
+            max_boxes_to_draw=20,
+            min_score_thresh=0.05))
+    image_with_detections_list.append(image_with_detections)
+
     print(' - Saving the outputs...')
     formatted_image_with_detections_list = [
         Image.fromarray(image.astype(np.uint8))
@@ -215,9 +286,10 @@ def save_outputs():
     images_str = ' '.join(image_strs)
     html_str += images_str
     html_str += '</html>'
-    with tf.gfile.GFile(FLAGS.output_html, 'w') as f:
+    with tf.gfile.GFile("output.html", 'w') as f:
         f.write(html_str)
-    np.save(FLAGS.output_file, res)
+    np.save("output.npy", res)
+    return {"v": "output.html", "d": "output.npy"}
 
 
 #if __name__ == '__main__':
