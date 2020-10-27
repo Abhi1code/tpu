@@ -636,7 +636,8 @@ def visualize_boxes_and_labels_on_image_array(
       draw_mask_on_image_array(
           image,
           box_to_instance_masks_map[box],
-          color=color
+          color='white',
+          alpha=1
       )
     if instance_boundaries is not None:
       draw_mask_on_image_array(
@@ -645,16 +646,7 @@ def visualize_boxes_and_labels_on_image_array(
           color='red',
           alpha=1.0
       )
-    draw_bounding_box_on_image_array(
-        image,
-        ymin,
-        xmin,
-        ymax,
-        xmax,
-        color=color,
-        thickness=line_thickness,
-        display_str_list=box_to_display_str_map[box],
-        use_normalized_coordinates=use_normalized_coordinates)
+    
     if keypoints is not None:
       draw_keypoints_on_image_array(
           image,

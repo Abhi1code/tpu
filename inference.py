@@ -192,28 +192,15 @@ def runModel(sess, predictions, image_input, image_file):
         'boxes': np_boxes.tolist(),
         'classes': np_classes.tolist(),
         'scores': np_scores.tolist(),
-        'attributes': np_attributes.tolist()
+        'attributes': np_attributes.tolist(),
+        'masks': encoded_masks
     }
     #'masks': encoded_masks,
     print("Output generated")
     return res
 
-def saveOutputs(sess, predictions, image_input, image_file):
-    print(' - Loading the label map...')
-    label_map_dict = {}
-    if 'csv' == 'csv':
-        with tf.gfile.Open('dataset/fashionpedia_label_map.csv', 'r') as csv_file:
-            reader = csv.reader(csv_file, delimiter=':')
-            for row in reader:
-                if len(row) != 2:
-                    raise ValueError('Each row of the csv label map file must be in '
-                                     '`id:name` format.')
-                id_index = int(row[0])
-                name = row[1]
-                label_map_dict[id_index] = {
-                    'id': id_index,
-                    'name': name,
-                }
+def saveOutputs(sess, predictions, image_input, image_file, label_map_dict, fname):
+    
 
     print(' - Processing image ...')
     with tf.gfile.GFile(image_file, 'rb') as f:
@@ -224,6 +211,10 @@ def saveOutputs(sess, predictions, image_input, image_file):
     width, height = image.size
     np_image = (np.array(image.getdata())
                 .reshape(height, width, 3).astype(np.uint8))
+    image1 = Image.new('RGB', (width, height))
+    #image1.save("image.png", "PNG")
+    np_image1 = (np.array(image1.getdata())
+                .reshape(height, width, 3).astype(np.uint8))          
 
     predictions_np = sess.run(
         predictions, feed_dict={image_input: image_bytes})
@@ -259,7 +250,7 @@ def saveOutputs(sess, predictions, image_input, image_file):
     image_with_detections_list = []
     image_with_detections = (
         visualization_utils.visualize_boxes_and_labels_on_image_array(
-            np_image,
+            np_image1,
             np_boxes,
             np_classes,
             np_scores,
@@ -268,27 +259,9 @@ def saveOutputs(sess, predictions, image_input, image_file):
             use_normalized_coordinates=False,
             max_boxes_to_draw=20,
             min_score_thresh=0.05))
+    ii = Image.fromarray(image_with_detections)        
+    ii.save('mesh/' + str(fname) + '.png', "PNG") 
     image_with_detections_list.append(image_with_detections)
-
-    print(' - Saving the outputs...')
-    formatted_image_with_detections_list = [
-        Image.fromarray(image.astype(np.uint8))
-        for image in image_with_detections_list]
-    html_str = '<html>'
-    image_strs = []
-    for formatted_image in formatted_image_with_detections_list:
-        with io.BytesIO() as stream:
-            formatted_image.save(stream, format='JPEG')
-            data_uri = base64.b64encode(stream.getvalue()).decode('utf-8')
-        image_strs.append(
-            '<img src="data:image/jpeg;base64,{}", height=800>'
-                .format(data_uri))
-    images_str = ' '.join(image_strs)
-    html_str += images_str
-    html_str += '</html>'
-    with tf.gfile.GFile("output.html", 'w') as f:
-        f.write(html_str)
-    np.save("output.npy", res)
     return {"v": "output.html", "d": "output.npy"}
 
 
