@@ -48,7 +48,7 @@ def output():
 
     if re.match(regex, request.args.get('uri')) is not None:
         urllib.request.urlretrieve(request.args.get('uri'), 'pred.jpg')
-        res = infer.runModel(sess, predictions, image_input, 'pred.jpg')
+        res = infer.saveOutputs(sess, predictions, image_input, 'pred.jpg')
         return res
     res = infer.saveOutputs(sess, predictions, image_input, request.args.get('uri'))
     #print(res)
