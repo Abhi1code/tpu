@@ -57,7 +57,7 @@ def output():
     #request.args.get('image')
     return res;
 
-@app.route("/category", methods=["GET"])
+@app.route("/category", methods=["POST"])
 def category():
     regex = re.compile(
         r'^(?:http|ftp)s?://'  # http:// or https://
@@ -67,12 +67,15 @@ def category():
         r'(?::\d+)?'  # optional port
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
-    if re.match(regex, request.args.get('uri')) is not None:
-        urllib.request.urlretrieve(request.args.get('uri'), 'pred.jpg')
-        res = infer.runModel(sess, predictions, image_input, 'pred.jpg')
-        res = cal.generate_all_cat(res)
-        return res
-    res = infer.runModel(sess, predictions, image_input, request.args.get('uri'))
+    local = Image.open(request.files['image'])
+    local.save("pred.jpg")
+
+    #if re.match(regex, request.args.get('uri')) is not None:
+    #    urllib.request.urlretrieve(request.args.get('uri'), 'pred.jpg')
+    #    res = infer.runModel(sess, predictions, image_input, 'pred.jpg')
+    #    res = cal.generate_all_cat(res)
+    #    return res
+    res = infer.runModel(sess, predictions, image_input, "pred.jpg")
     res = cal.generate_all_cat(res)
     #print(res)
     #request.args.get('image')
